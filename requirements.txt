@@ -1,0 +1,9 @@
+# Telegram Bot API wrapper (v20+ uses async/await natively)
+# [jobqueue] extra enables the built-in JobQueue for scheduled messages
+python-telegram-bot[job-queue]==21.5
+
+# Load environment variables from .env file
+python-dotenv==1.0.1
+
+# HTTP client used internally by python-telegram-bot
+httpx==0.27.2

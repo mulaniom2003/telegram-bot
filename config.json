@@ -1,0 +1,10 @@
+{
+  "description": "Add your target Telegram group/channel IDs below. Use /chatid in any chat to get the ID.",
+  "target_chats": [],
+  "notes": {
+    "group_id_format": "Negative number like -1001234567890",
+    "channel_id_format": "Negative number like -1009876543210",
+    "private_chat": "Positive number like 123456789",
+    "tip": "Use /addchat <id> via bot command, or add IDs manually here and restart the bot"
+  }
+}
