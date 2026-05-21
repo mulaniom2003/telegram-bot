@@ -284,6 +284,7 @@ async def show_schedules(msg):
 # /start
 # ─────────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message: return
     user = update.effective_user; uid = user.id
     chat = update.effective_chat
 
@@ -292,7 +293,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "👋 *Hey there!*\n\n"
             "I'm *CS Broadcast Bot* — a tool for broadcasting content to multiple chats.\n\n"
-            "📩 Open me in private to get started:\n👉 @CS_BroadcastBot\n\n"
+            "📩 Open me in private to get started:\n👉 @CS\_BroadcastBot\n\n"
             "❓ *Support / Queries:* @CheekyXD",
             parse_mode=ParseMode.MARKDOWN,
         )
