@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from dotenv import load_dotenv
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import BotCommand, BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats, Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import Application, CallbackQueryHandler, ChatMemberHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
@@ -309,6 +309,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🔒 *This bot is private.* Tap below to request access.\n\n"
         "❓ *Support:* @CheekyXD",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📨 Request Access", callback_data=f"req:{uid}")]]),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+# ─────────────────────────────────────────────
+# /about
+# ─────────────────────────────────────────────
+async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message: return
+    await update.message.reply_text(
+        "🤖 *CS Broadcast Bot*\n\n"
+        "A private broadcasting tool for sending messages, photos, videos and more to multiple Telegram chats at once.\n\n"
+        "✅ Broadcast text, photos, videos, files, audio & stickers\n"
+        "📅 Schedule messages in advance\n"
+        "📦 Ad packages for approved users\n"
+        "🔒 Private access — invite only\n\n"
+        "📩 Start in private: @CS\_BroadcastBot\n"
+        "❓ *Support:* @CheekyXD",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -1016,6 +1033,23 @@ async def restore_schedules(app):
         delay = max(1.0,(datetime.fromisoformat(e["send_at"])-now).total_seconds())
         app.job_queue.run_once(_send_scheduled, when=delay, data=e, name=str(e["id"])); n+=1
     if n: logger.info(f"Restored {n} schedule(s)")
+    # Register bot commands in Telegram UI
+    try:
+        private_cmds = [
+            BotCommand("start",   "Open the bot menu"),
+            BotCommand("menu",    "Open the bot menu"),
+            BotCommand("about",   "About this bot"),
+        ]
+        group_cmds = [
+            BotCommand("start",   "Start / info about this bot"),
+            BotCommand("about",   "About CS Broadcast Bot"),
+            BotCommand("addhere", "Add this group to your broadcast list"),
+        ]
+        await app.bot.set_my_commands(private_cmds, scope=BotCommandScopeAllPrivateChats())
+        await app.bot.set_my_commands(group_cmds,   scope=BotCommandScopeAllGroupChats())
+        logger.info("Bot commands registered.")
+    except Exception as ex:
+        logger.warning(f"Could not set commands: {ex}")
 
 async def handle_bot_member_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ask for confirmation when bot is added to any group or channel."""
@@ -1103,6 +1137,7 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start",   start))
     app.add_handler(CommandHandler("menu",    start))
+    app.add_handler(CommandHandler("about",   about))
     app.add_handler(CommandHandler("addhere", addhere))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(ChatMemberHandler(handle_bot_member_update, ChatMemberHandler.MY_CHAT_MEMBER))
