@@ -319,39 +319,50 @@ async def handle_add_chat(msg, context, raw: str, uid: int):
             user_obj.setdefault("chat_info", {})[str(cid)] = cinfo
             save_users(users_data)
 
-    # Private invite links (t.me/+XXXX) can't be resolved via API
-    if "t.me/+" in raw or raw.startswith("+"):
-        await msg.reply_text(
-            "⚠️ *Private invite links can't be added this way.*\n\n"
-            "For private groups/channels do either:\n"
-            "• *Auto:* Just add the bot as admin to the group — it registers instantly ✅\n"
-            "• *Manual:* Send the numeric chat ID (e.g. `-1001234567890`)",
-            reply_markup=kb_cancel(), parse_mode=ParseMode.MARKDOWN
-        )
-        return
-    if "t.me/" in raw: raw = "@" + raw.split("t.me/")[-1].strip("/")
+    # Normalise: extract invite hash or username from various link formats
+    is_invite = False
+    if "t.me/+" in raw:
+        # Private invite link — keep as full URL for get_chat
+        is_invite = True
+        raw = raw if raw.startswith("https://") else "https://t.me/+" + raw.split("t.me/+")[-1].strip("/")
+    elif "t.me/" in raw:
+        raw = "@" + raw.split("t.me/")[-1].strip("/")
+
     if raw.lstrip("-").isdigit():
         cid = int(raw)
         if already_has(cid):
             await msg.reply_text(f"⚠️ `{cid}` already in your list.", parse_mode=ParseMode.MARKDOWN); return
         do_add(cid, {})
         context.user_data.pop("state", None)
-        await msg.reply_text(f"✅ Chat `{cid}` added!", parse_mode=ParseMode.MARKDOWN, reply_markup=kb_chats() if admin else kb_chats())
+        await msg.reply_text(f"✅ Chat `{cid}` added!", parse_mode=ParseMode.MARKDOWN, reply_markup=kb_chats())
         return
-    if not raw.startswith("@"): raw = "@" + raw
-    searching = await msg.reply_text(f"🔍 Looking up `{raw}`…", parse_mode=ParseMode.MARKDOWN)
-    try: chat = await context.bot.get_chat(raw)
+
+    if not raw.startswith("@") and not is_invite: raw = "@" + raw
+    label = "private invite link" if is_invite else f"`{raw}`"
+    searching = await msg.reply_text(f"🔍 Looking up {label}…", parse_mode=ParseMode.MARKDOWN)
+    try:
+        chat = await context.bot.get_chat(raw)
     except Exception as e:
-        await searching.edit_text(f"❌ Not found: `{raw}`\n`{e}`", parse_mode=ParseMode.MARKDOWN); return
+        if is_invite:
+            await searching.edit_text(
+                f"❌ *Could not access this private group.*\n\n"
+                f"The bot must be a member first. Two ways to add it:\n\n"
+                f"*Option 1 — Auto (easiest):*\nAdd the bot as admin to the group → you'll get a Yes/No prompt\n\n"
+                f"*Option 2 — Manual:*\nSend the numeric chat ID (e.g. `-1001234567890`)",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            await searching.edit_text(f"❌ Not found: `{raw}`\n`{e}`", parse_mode=ParseMode.MARKDOWN)
+        return
     cid = chat.id
     if already_has(cid):
-        await searching.edit_text(f"⚠️ *{chat.title}* already in your list.", parse_mode=ParseMode.MARKDOWN); return
+        await searching.edit_text(f"⚠️ *{chat.title or cid}* already in your list.", parse_mode=ParseMode.MARKDOWN); return
     cinfo = {"title": chat.title or chat.username or str(cid), "type": chat.type}
     do_add(cid, cinfo)
     context.user_data.pop("state", None)
-    e2 = {"channel":"📢","group":"👥","supergroup":"👥","private":"👤"}.get(chat.type,"💬")
+    e2 = {"channel": "📢", "group": "👥", "supergroup": "👥", "private": "👤"}.get(chat.type, "💬")
     await searching.edit_text(f"✅ *{cinfo['title']}* added!\n{e2} `{chat.type}` | ID: `{cid}`", parse_mode=ParseMode.MARKDOWN)
-    await msg.reply_text("⚙️ Chats", reply_markup=kb_chats() if admin else kb_chats(), parse_mode=ParseMode.MARKDOWN)
+    await msg.reply_text("⚙️ Chats", reply_markup=kb_chats(), parse_mode=ParseMode.MARKDOWN)
 
 # ─────────────────────────────────────────────
 # MESSAGE HANDLER
@@ -608,6 +619,58 @@ async def _handle_add_user(msg, context, raw, admin_uid):
 # ─────────────────────────────────────────────
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query; uid = q.from_user.id; data = q.data
+
+    # ── Bot-added-to-group confirmations (admin) ──
+    if data.startswith("gadd:"):
+        if not is_admin(uid): await q.answer("Not authorized.", show_alert=True); return
+        _, adder_uid, cid_str = data.split(":", 2); cid = int(cid_str)
+        config = load_config()
+        if cid in config["target_chats"]:
+            await q.answer("Already in your list.", show_alert=True)
+            await q.edit_message_text("ℹ️ This chat is already in your list.", parse_mode=ParseMode.MARKDOWN); return
+        try:
+            chat = await context.bot.get_chat(cid)
+            cinfo = {"title": chat.title or str(cid), "type": chat.type}
+        except: cinfo = {}
+        config["target_chats"].append(cid)
+        config.setdefault("chat_info", {})[str(cid)] = cinfo
+        save_config(config)
+        await q.answer("Added!", show_alert=False)
+        title = cinfo.get("title", str(cid))
+        await q.edit_message_text(f"✅ *{title}* added to your chat list!", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    if data.startswith("gdeny:"):
+        if not is_admin(uid): await q.answer("Not authorized.", show_alert=True); return
+        await q.answer("Skipped.", show_alert=False)
+        await q.edit_message_text("❌ Not added.", parse_mode=ParseMode.MARKDOWN); return
+
+    # ── Bot-added-to-group confirmations (approved user) ──
+    if data.startswith("ugadd:"):
+        _, owner_uid_str, cid_str = data.split(":", 2)
+        owner_uid = int(owner_uid_str); cid = int(cid_str)
+        if uid != owner_uid and not is_admin(uid): await q.answer("Not authorized.", show_alert=True); return
+        if not is_approved(owner_uid): await q.answer("User not approved.", show_alert=True); return
+        users_data = load_users()
+        u2 = next((x for x in users_data["approved"] if x["id"] == owner_uid), None)
+        if not u2: await q.answer("User not found.", show_alert=True); return
+        if cid in u2.get("target_chats", []):
+            await q.answer("Already in list.", show_alert=True)
+            await q.edit_message_text("ℹ️ Already in your list."); return
+        try:
+            chat = await context.bot.get_chat(cid)
+            cinfo = {"title": chat.title or str(cid), "type": chat.type}
+        except: cinfo = {}
+        u2.setdefault("target_chats", []).append(cid)
+        u2.setdefault("chat_info", {})[str(cid)] = cinfo
+        save_users(users_data)
+        await q.answer("Added!", show_alert=False)
+        await q.edit_message_text(f"✅ *{cinfo.get('title', cid)}* added to your chat list!", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    if data.startswith("ugdeny:"):
+        await q.answer("Skipped.", show_alert=False)
+        await q.edit_message_text("❌ Not added."); return
 
     # Access request — any user
     if data.startswith("req:"):
@@ -882,61 +945,67 @@ async def restore_schedules(app):
     if n: logger.info(f"Restored {n} schedule(s)")
 
 async def handle_bot_member_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Auto-register chat when bot is added as member/admin to any group or channel."""
+    """Ask for confirmation when bot is added to any group or channel."""
     result = update.my_chat_member
     if not result: return
     old_status = result.old_chat_member.status
     new_status = result.new_chat_member.status
-    chat = result.chat
+    if new_status not in ("member", "administrator"): return
+    if old_status in ("member", "administrator"): return  # already was member
+
+    chat     = result.chat
     added_by = result.from_user
+    cid      = chat.id
+    cinfo    = {"title": chat.title or str(cid), "type": chat.type}
+    e        = {"channel": "📢", "group": "👥", "supergroup": "👥", "private": "👤"}.get(chat.type, "💬")
+    uid      = added_by.id if added_by else None
+    logger.info(f"Bot added to {cid} ({cinfo['title']}) by {uid}")
 
-    if new_status in ("member", "administrator") and old_status not in ("member", "administrator"):
-        cid   = chat.id
-        cinfo = {"title": chat.title or str(cid), "type": chat.type}
-        e     = {"channel": "📢", "group": "👥", "supergroup": "👥"}.get(chat.type, "💬")
-        uid   = added_by.id if added_by else None
+    confirm_kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Yes, Add", callback_data=f"gadd:{uid or 0}:{cid}"),
+        InlineKeyboardButton("❌ No",       callback_data=f"gdeny:{cid}"),
+    ]])
+    text = (
+        f"🔔 *Bot was added to a chat!*\n\n"
+        f"{e} *{cinfo['title']}*\n"
+        f"`{chat.type}` | ID: `{cid}`\n\n"
+        f"Add this to your chat list?"
+    )
 
-        if is_admin(uid) if uid else True:
-            config = load_config()
-            if cid not in config["target_chats"]:
-                config["target_chats"].append(cid)
-                config.setdefault("chat_info", {})[str(cid)] = cinfo
-                save_config(config)
-                logger.info(f"Auto-added chat {cid} ({cinfo['title']}) by {uid}")
-                for aid in ADMIN_IDS:
-                    try:
-                        await context.bot.send_message(
-                            chat_id=aid,
-                            text=f"✅ *Chat auto-added!*\n\n{e} *{cinfo['title']}*\n`{chat.type}` | ID: `{cid}`",
-                            parse_mode=ParseMode.MARKDOWN,
-                        )
-                    except Exception as ex:
-                        logger.error(f"Notify failed: {ex}")
-            else:
-                for aid in ADMIN_IDS:
-                    try:
-                        await context.bot.send_message(
-                            chat_id=aid,
-                            text=f"ℹ️ Bot re-added to *{cinfo['title']}* (already in your list).",
-                            parse_mode=ParseMode.MARKDOWN,
-                        )
-                    except: pass
-        else:
-            u_obj = get_approved_user(uid) if uid else None
-            if u_obj:
-                users_data = load_users()
-                u2 = next((x for x in users_data["approved"] if x["id"] == uid), None)
-                if u2 and cid not in u2.get("target_chats", []):
-                    u2.setdefault("target_chats", []).append(cid)
-                    u2.setdefault("chat_info", {})[str(cid)] = cinfo
-                    save_users(users_data)
-                    try:
-                        await context.bot.send_message(
-                            chat_id=uid,
-                            text=f"✅ *{e} {cinfo['title']}* added to your chat list!",
-                            parse_mode=ParseMode.MARKDOWN,
-                        )
-                    except: pass
+    if uid and is_admin(uid):
+        # Admin added it — ask admin
+        for aid in ADMIN_IDS:
+            try:
+                await context.bot.send_message(chat_id=aid, text=text, reply_markup=confirm_kb, parse_mode=ParseMode.MARKDOWN)
+            except Exception as ex: logger.error(f"Notify failed: {ex}")
+    elif uid and is_approved(uid):
+        # Approved user added it — ask that user, also notify admin
+        u_kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Yes, Add", callback_data=f"ugadd:{uid}:{cid}"),
+            InlineKeyboardButton("❌ No",       callback_data=f"ugdeny:{cid}"),
+        ]])
+        uname = f" (@{added_by.username})" if added_by and added_by.username else ""
+        try:
+            await context.bot.send_message(chat_id=uid, text=text, reply_markup=u_kb, parse_mode=ParseMode.MARKDOWN)
+        except Exception as ex: logger.error(f"User notify failed: {ex}")
+        for aid in ADMIN_IDS:
+            try:
+                await context.bot.send_message(
+                    chat_id=aid,
+                    text=f"ℹ️ Bot added to {e} *{cinfo['title']}* by user *{added_by.first_name if added_by else uid}*{uname}",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            except: pass
+    else:
+        # Unknown user added bot — just notify admin
+        for aid in ADMIN_IDS:
+            try:
+                await context.bot.send_message(
+                    chat_id=aid,
+                    text=f"⚠️ Bot was added to {e} *{cinfo['title']}* by an unknown user.\n\nAdd to your list?",
+                    reply_markup=confirm_kb, parse_mode=ParseMode.MARKDOWN,
+                )
+            except Exception as ex: logger.error(f"Notify failed: {ex}")
 
 async def error_handler(update, context):
     logger.error(f"Error: {context.error}", exc_info=True)
