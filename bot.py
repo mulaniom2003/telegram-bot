@@ -285,15 +285,86 @@ async def show_schedules(msg):
 # ─────────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user; uid = user.id
+    chat = update.effective_chat
+
+    # Group/channel context → redirect to private chat
+    if chat and chat.type != "private":
+        await update.message.reply_text(
+            "👋 *Hey there!*\n\n"
+            "I'm *CS Broadcast Bot* — a tool for broadcasting content to multiple chats.\n\n"
+            "📩 Open me in private to get started:\n👉 @CS_BroadcastBot\n\n"
+            "❓ *Support / Queries:* @CheekyXD",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
     if is_approved(uid):
         await show_main(update.message, context, uid); return
     if is_pending(uid):
         await update.message.reply_text("⏳ *Your request is pending.* The admin will review it shortly.", parse_mode=ParseMode.MARKDOWN); return
     await update.message.reply_text(
-        "🔒 *This bot is private.*\n\nTap below to request access.",
+        "👋 *Welcome to CS Broadcast Bot!*\n\n"
+        "This bot lets you broadcast messages to multiple Telegram chats at once.\n\n"
+        "🔒 *This bot is private.* Tap below to request access.\n\n"
+        "❓ *Support:* @CheekyXD",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📨 Request Access", callback_data=f"req:{uid}")]]),
         parse_mode=ParseMode.MARKDOWN,
     )
+
+# ─────────────────────────────────────────────
+# /addhere — used inside a group to trigger add prompt
+# ─────────────────────────────────────────────
+async def addhere(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    user = update.effective_user
+    uid  = user.id
+    if chat.type == "private":
+        await update.message.reply_text("ℹ️ Use this command *inside the group* you want to add.", parse_mode=ParseMode.MARKDOWN)
+        return
+    if not (is_admin(uid) or is_approved(uid)):
+        await update.message.reply_text("🔒 You don't have access to this bot.", parse_mode=ParseMode.MARKDOWN)
+        return
+    cid   = chat.id
+    cinfo = {"title": chat.title or str(cid), "type": chat.type}
+    e     = {"channel": "📢", "group": "👥", "supergroup": "👥"}.get(chat.type, "💬")
+
+    if is_admin(uid):
+        config = load_config()
+        if cid in config["target_chats"]:
+            await update.message.reply_text("ℹ️ This chat is already in your list.")
+            return
+        confirm_kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Yes, Add", callback_data=f"gadd:{uid}:{cid}"),
+            InlineKeyboardButton("❌ No",       callback_data=f"gdeny:{cid}"),
+        ]])
+        for aid in ADMIN_IDS:
+            try:
+                await context.bot.send_message(
+                    chat_id=aid,
+                    text=f"🔔 *Add this chat to your list?*\n\n{e} *{cinfo['title']}*\n`{chat.type}` | ID: `{cid}`",
+                    reply_markup=confirm_kb, parse_mode=ParseMode.MARKDOWN,
+                )
+            except Exception as ex: logger.error(f"addhere notify failed: {ex}")
+        await update.message.reply_text("✅ Check your private chat with me to confirm!")
+    else:
+        users_data = load_users()
+        u2 = next((x for x in users_data["approved"] if x["id"] == uid), None)
+        if u2 and cid in u2.get("target_chats", []):
+            await update.message.reply_text("ℹ️ Already in your list.")
+            return
+        confirm_kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Yes, Add", callback_data=f"ugadd:{uid}:{cid}"),
+            InlineKeyboardButton("❌ No",       callback_data=f"ugdeny:{cid}"),
+        ]])
+        try:
+            await context.bot.send_message(
+                chat_id=uid,
+                text=f"🔔 *Add this chat to your list?*\n\n{e} *{cinfo['title']}*\n`{chat.type}` | ID: `{cid}`",
+                reply_markup=confirm_kb, parse_mode=ParseMode.MARKDOWN,
+            )
+            await update.message.reply_text("✅ Check your private chat with me to confirm!")
+        except Exception as ex:
+            await update.message.reply_text("❌ Couldn't reach you in private. Start the bot first: @CS_BroadcastBot")
 
 # ─────────────────────────────────────────────
 # ADD CHAT HELPER (shared logic)
@@ -345,10 +416,11 @@ async def handle_add_chat(msg, context, raw: str, uid: int):
     except Exception as e:
         if is_invite:
             await searching.edit_text(
-                f"❌ *Could not access this private group.*\n\n"
-                f"The bot must be a member first. Two ways to add it:\n\n"
-                f"*Option 1 — Auto (easiest):*\nAdd the bot as admin to the group → you'll get a Yes/No prompt\n\n"
-                f"*Option 2 — Manual:*\nSend the numeric chat ID (e.g. `-1001234567890`)",
+                "❌ *Private invite links can't be resolved directly.*\n\n"
+                "To add a private group:\n\n"
+                "1️⃣ Add *@CS_BroadcastBot* as admin to the group\n"
+                "2️⃣ You'll get a *Yes/No prompt* here instantly\n\n"
+                "Or type `/addhere` *inside the group* and the bot will ask you to confirm.",
                 parse_mode=ParseMode.MARKDOWN
             )
         else:
@@ -1028,8 +1100,9 @@ def main():
         if not path.exists(): _save(path, default)
 
     app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("menu",  start))
+    app.add_handler(CommandHandler("start",   start))
+    app.add_handler(CommandHandler("menu",    start))
+    app.add_handler(CommandHandler("addhere", addhere))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(ChatMemberHandler(handle_bot_member_update, ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_handler(MessageHandler(
