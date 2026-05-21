@@ -294,7 +294,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "👋 *Hey there!*\n\n"
             "I'm *CS Broadcast Bot* — a tool for broadcasting content to multiple chats.\n\n"
             "📩 Open me in private to get started:\n👉 @CS\_BroadcastBot\n\n"
-            "❓ *Support / Queries:* @CheekyXD",
+            "💡 *To add this group to your broadcast list* — just type `/addhere`\n\n"
+            "❓ *Support:* @CheekyXD",
             parse_mode=ParseMode.MARKDOWN,
         )
         return
@@ -436,7 +437,7 @@ async def handle_add_chat(msg, context, raw: str, uid: int):
             await searching.edit_text(
                 "❌ *Private invite links can't be looked up* — this is a Telegram API limitation.\n\n"
                 "*To add this private group:*\n"
-                "➡️ Add *@CS\_BroadcastBot* as admin to the group\n"
+                "➡️ Add *@CS\_BroadcastBot* to the group (member is enough)\n"
                 "➡️ You'll instantly get a *Yes / No* prompt here to add it",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -636,7 +637,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif text == B_ADD_CHAT:
         context.user_data["state"] = "await_add_chat"
-        await msg.reply_text("➕ Send @username, t.me/link, or ID:\n\nℹ️ Bot needs to be admin only in chats where you want to *send/broadcast* content.", reply_markup=kb_cancel(), parse_mode=ParseMode.MARKDOWN)
+        await msg.reply_text("➕ Send @username, t.me/link, or numeric ID:\n\nℹ️ For private groups — just add the bot to the group (no need to make it admin). You'll get a Yes/No prompt here automatically.", reply_markup=kb_cancel(), parse_mode=ParseMode.MARKDOWN)
     elif text == B_ACTIVE:
         if admin:
             c = load_config(); t,k = inline_admin_chats(c,"active")
