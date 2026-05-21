@@ -434,11 +434,10 @@ async def handle_add_chat(msg, context, raw: str, uid: int):
     except Exception as e:
         if is_invite:
             await searching.edit_text(
-                "❌ *Private invite links can't be resolved directly.*\n\n"
-                "To add a private group:\n\n"
-                "1️⃣ Add *@CS_BroadcastBot* as admin to the group\n"
-                "2️⃣ You'll get a *Yes/No prompt* here instantly\n\n"
-                "Or type `/addhere` *inside the group* and the bot will ask you to confirm.",
+                "❌ *Private invite links can't be looked up* — this is a Telegram API limitation.\n\n"
+                "*To add this private group:*\n"
+                "➡️ Add *@CS\_BroadcastBot* as admin to the group\n"
+                "➡️ You'll instantly get a *Yes / No* prompt here to add it",
                 parse_mode=ParseMode.MARKDOWN
             )
         else:
@@ -1052,67 +1051,58 @@ async def restore_schedules(app):
         logger.warning(f"Could not set commands: {ex}")
 
 async def handle_bot_member_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ask for confirmation when bot is added to any group or channel."""
+    """Notify when bot is added to any group/channel — always fires for admin."""
     result = update.my_chat_member
     if not result: return
     old_status = result.old_chat_member.status
     new_status = result.new_chat_member.status
     if new_status not in ("member", "administrator"): return
-    if old_status in ("member", "administrator"): return  # already was member
+    if old_status in ("member", "administrator"): return
 
     chat     = result.chat
     added_by = result.from_user
     cid      = chat.id
-    cinfo    = {"title": chat.title or str(cid), "type": chat.type}
-    e        = {"channel": "📢", "group": "👥", "supergroup": "👥", "private": "👤"}.get(chat.type, "💬")
-    uid      = added_by.id if added_by else None
-    logger.info(f"Bot added to {cid} ({cinfo['title']}) by {uid}")
+    title    = chat.title or str(cid)
+    ctype    = chat.type
+    e        = {"channel": "📢", "group": "👥", "supergroup": "👥"}.get(ctype, "💬")
+    adder_uid = added_by.id if added_by else 0
+    adder_name = (added_by.first_name or str(adder_uid)) if added_by else "Unknown"
+    adder_uname = f" (@{added_by.username})" if added_by and added_by.username else ""
+    logger.info(f"Bot added to {cid} ({title}) by {adder_uid}")
 
-    confirm_kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Yes, Add", callback_data=f"gadd:{uid or 0}:{cid}"),
+    # ── Always notify admin ──────────────────
+    admin_kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Yes, Add", callback_data=f"gadd:{adder_uid}:{cid}"),
         InlineKeyboardButton("❌ No",       callback_data=f"gdeny:{cid}"),
     ]])
-    text = (
-        f"🔔 *Bot was added to a chat!*\n\n"
-        f"{e} *{cinfo['title']}*\n"
-        f"`{chat.type}` | ID: `{cid}`\n\n"
-        f"Add this to your chat list?"
+    admin_text = (
+        f"🔔 *Bot added to a chat!*\n\n"
+        f"{e} *{title}*\n"
+        f"Type: `{ctype}` | ID: `{cid}`\n"
+        f"Added by: *{adder_name}*{adder_uname}\n\n"
+        f"Add this to your broadcast list?"
     )
+    for aid in ADMIN_IDS:
+        try:
+            await context.bot.send_message(chat_id=aid, text=admin_text, reply_markup=admin_kb, parse_mode=ParseMode.MARKDOWN)
+            logger.info(f"Admin {aid} notified about {cid}")
+        except Exception as ex:
+            logger.error(f"Failed to notify admin {aid}: {ex}")
 
-    if uid and is_admin(uid):
-        # Admin added it — ask admin
-        for aid in ADMIN_IDS:
-            try:
-                await context.bot.send_message(chat_id=aid, text=text, reply_markup=confirm_kb, parse_mode=ParseMode.MARKDOWN)
-            except Exception as ex: logger.error(f"Notify failed: {ex}")
-    elif uid and is_approved(uid):
-        # Approved user added it — ask that user, also notify admin
-        u_kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Yes, Add", callback_data=f"ugadd:{uid}:{cid}"),
+    # ── Also notify the user who added (if approved non-admin) ──
+    if adder_uid and not is_admin(adder_uid) and is_approved(adder_uid):
+        user_kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Yes, Add", callback_data=f"ugadd:{adder_uid}:{cid}"),
             InlineKeyboardButton("❌ No",       callback_data=f"ugdeny:{cid}"),
         ]])
-        uname = f" (@{added_by.username})" if added_by and added_by.username else ""
         try:
-            await context.bot.send_message(chat_id=uid, text=text, reply_markup=u_kb, parse_mode=ParseMode.MARKDOWN)
-        except Exception as ex: logger.error(f"User notify failed: {ex}")
-        for aid in ADMIN_IDS:
-            try:
-                await context.bot.send_message(
-                    chat_id=aid,
-                    text=f"ℹ️ Bot added to {e} *{cinfo['title']}* by user *{added_by.first_name if added_by else uid}*{uname}",
-                    parse_mode=ParseMode.MARKDOWN,
-                )
-            except: pass
-    else:
-        # Unknown user added bot — just notify admin
-        for aid in ADMIN_IDS:
-            try:
-                await context.bot.send_message(
-                    chat_id=aid,
-                    text=f"⚠️ Bot was added to {e} *{cinfo['title']}* by an unknown user.\n\nAdd to your list?",
-                    reply_markup=confirm_kb, parse_mode=ParseMode.MARKDOWN,
-                )
-            except Exception as ex: logger.error(f"Notify failed: {ex}")
+            await context.bot.send_message(
+                chat_id=adder_uid,
+                text=f"🔔 *Bot added to {e} {title}*\n\nAdd this to your broadcast list?",
+                reply_markup=user_kb, parse_mode=ParseMode.MARKDOWN,
+            )
+        except Exception as ex:
+            logger.error(f"Failed to notify user {adder_uid}: {ex}")
 
 async def error_handler(update, context):
     from telegram.error import Conflict, NetworkError, TimedOut
