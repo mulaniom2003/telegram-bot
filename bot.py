@@ -1008,9 +1008,15 @@ async def handle_bot_member_update(update: Update, context: ContextTypes.DEFAULT
             except Exception as ex: logger.error(f"Notify failed: {ex}")
 
 async def error_handler(update, context):
-    logger.error(f"Error: {context.error}", exc_info=True)
+    from telegram.error import Conflict, NetworkError, TimedOut
+    err = context.error
+    # Don't spam admin with polling/network noise
+    if isinstance(err, (Conflict, NetworkError, TimedOut)):
+        logger.warning(f"Suppressed error: {err}")
+        return
+    logger.error(f"Error: {err}", exc_info=True)
     for aid in ADMIN_IDS:
-        try: await context.bot.send_message(chat_id=aid, text=f"⚠️ `{context.error}`", parse_mode=ParseMode.MARKDOWN)
+        try: await context.bot.send_message(chat_id=aid, text=f"⚠️ `{err}`", parse_mode=ParseMode.MARKDOWN)
         except: pass
 
 # ─────────────────────────────────────────────
