@@ -1066,9 +1066,21 @@ async def handle_bot_member_update(update: Update, context: ContextTypes.DEFAULT
     title    = chat.title or str(cid)
     ctype    = chat.type
     e        = {"channel": "📢", "group": "👥", "supergroup": "👥"}.get(ctype, "💬")
-    adder_uid = added_by.id if added_by else 0
-    adder_name = (added_by.first_name or str(adder_uid)) if added_by else "Unknown"
+    adder_uid   = added_by.id if added_by else 0
+    adder_name  = (added_by.first_name or str(adder_uid)) if added_by else "Unknown"
     adder_uname = f" (@{added_by.username})" if added_by and added_by.username else ""
+
+    # Build link line
+    if chat.username:
+        link_line = f"🔗 @{chat.username}  |  t.me/{chat.username}"
+    else:
+        # Try to get invite link if bot is admin; fallback to showing ID only
+        try:
+            invite = await context.bot.export_chat_invite_link(cid)
+            link_line = f"🔗 {invite}"
+        except:
+            link_line = f"🔒 Private  |  ID: `{cid}`"
+
     logger.info(f"Bot added to {cid} ({title}) by {adder_uid}")
 
     # ── Always notify admin ──────────────────
@@ -1079,7 +1091,7 @@ async def handle_bot_member_update(update: Update, context: ContextTypes.DEFAULT
     admin_text = (
         f"🔔 *Bot added to a chat!*\n\n"
         f"{e} *{title}*\n"
-        f"Type: `{ctype}` | ID: `{cid}`\n"
+        f"{link_line}\n"
         f"Added by: *{adder_name}*{adder_uname}\n\n"
         f"Add this to your broadcast list?"
     )
