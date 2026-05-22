@@ -1104,30 +1104,31 @@ async def handle_bot_member_update(update: Update, context: ContextTypes.DEFAULT
             except Exception as ex: logger.error(f"Admin notify failed: {ex}")
 
     elif adder_uid and is_approved(adder_uid):
-        # ── Approved user added it → auto-add instantly ──────────
-        users_data = load_users()
-        u2 = next((x for x in users_data["approved"] if x["id"] == adder_uid), None)
-        if u2:
-            if cid not in u2.get("target_chats", []):
-                u2.setdefault("target_chats", []).append(cid)
-                u2.setdefault("chat_info", {})[str(cid)] = cinfo
-                save_users(users_data)
-                try:
-                    await context.bot.send_message(
-                        chat_id=adder_uid,
-                        text=f"✅ {e} *{title}* added to your broadcast list!\n{link_line}",
-                        parse_mode=ParseMode.MARKDOWN,
-                    )
-                except Exception as ex: logger.error(f"User notify failed: {ex}")
-            # Notify admin (info only, no action needed)
-            for aid in ADMIN_IDS:
-                try:
-                    await context.bot.send_message(
-                        chat_id=aid,
-                        text=f"ℹ️ {e} *{title}* auto-added to *{adder_name}*{adder_uname}'s list\n{link_line}",
-                        parse_mode=ParseMode.MARKDOWN,
-                    )
-                except: pass
+        # ── Approved user added it → ask THEM Yes/No ─────────────
+        user_kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Yes, Add", callback_data=f"ugadd:{adder_uid}:{cid}"),
+            InlineKeyboardButton("❌ No",       callback_data=f"ugdeny:{cid}"),
+        ]])
+        try:
+            await context.bot.send_message(
+                chat_id=adder_uid,
+                text=(
+                    f"🔔 *Bot added to a chat!*\n\n"
+                    f"{e} *{title}*\n{link_line}\n\n"
+                    f"Add this to your broadcast list?"
+                ),
+                reply_markup=user_kb, parse_mode=ParseMode.MARKDOWN,
+            )
+        except Exception as ex: logger.error(f"User notify failed: {ex}")
+        # Info-only to admin
+        for aid in ADMIN_IDS:
+            try:
+                await context.bot.send_message(
+                    chat_id=aid,
+                    text=f"ℹ️ {e} *{title}* — *{adder_name}*{adder_uname} added bot to this group\n{link_line}",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            except: pass
 
     else:
         # ── Unknown user added bot → ask admin Yes/No ─────────────
