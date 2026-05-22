@@ -628,7 +628,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text(f"ℹ️ *Info*\n\n👤 {user.first_name}\n🆔 `{uid}`\n💬 Chat ID: `{msg.chat_id}`", reply_markup=kb_main(uid), parse_mode=ParseMode.MARKDOWN)
     elif text == B_USERS and admin: await msg.reply_text("👥 *Manage Users*", reply_markup=kb_users(), parse_mode=ParseMode.MARKDOWN)
 
-    elif text == B_TEXT:    context.user_data["state"]="await_text";    await msg.reply_text("📝 Type your message:\n_(HTML: `<b>bold</b>` `<i>italic</i>`)_", reply_markup=kb_cancel(), parse_mode=ParseMode.MARKDOWN)
+    elif text == B_TEXT:    context.user_data["state"]="await_text";    await msg.reply_text("📝 *Type your message:*", reply_markup=kb_cancel(), parse_mode=ParseMode.MARKDOWN)
     elif text == B_PHOTO:   context.user_data["state"]="await_photo";   await msg.reply_text("🖼 Send the photo:", reply_markup=kb_cancel())
     elif text == B_VIDEO:   context.user_data["state"]="await_video";   await msg.reply_text("🎬 Send the video:", reply_markup=kb_cancel())
     elif text == B_FILE:    context.user_data["state"]="await_file";    await msg.reply_text("📁 Send the file:", reply_markup=kb_cancel())
