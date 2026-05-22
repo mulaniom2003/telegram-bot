@@ -1,0 +1,42 @@
+{
+  "approved": [
+    {
+      "id": 6062606381,
+      "name": "Jackson",
+      "username": "confidently",
+      "requested_at": "2026-05-20T20:19:58.006614+00:00",
+      "added_at": "2026-05-20T20:20:06.730289+00:00",
+      "target_chats": [],
+      "chat_info": {},
+      "removed_chats": [],
+      "ad_packages": [],
+      "pending_payments": []
+    },
+    {
+      "id": 7048191629,
+      "name": "Stacy Backup",
+      "username": "StacyBackup",
+      "requested_at": "2026-05-20T20:46:54.509439+00:00",
+      "added_at": "2026-05-20T20:47:06.341097+00:00",
+      "target_chats": [],
+      "chat_info": {},
+      "removed_chats": [],
+      "ad_packages": [],
+      "pending_payments": []
+    },
+    {
+      "id": 6510529863,
+      "name": "\ud835\udde6\ud835\udde3\ud835\udddc\ud835\uddd7\ud835\uddd8\ud835\uddec",
+      "username": "spideyads",
+      "requested_at": "2026-05-20T21:09:58.827952+00:00",
+      "added_at": "2026-05-20T21:40:53.897467+00:00",
+      "target_chats": [],
+      "chat_info": {},
+      "removed_chats": [],
+      "ad_packages": [],
+      "pending_payments": []
+    }
+  ],
+  "pending": [],
+  "denied": []
+}

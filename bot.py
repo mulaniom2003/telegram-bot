@@ -1081,41 +1081,73 @@ async def handle_bot_member_update(update: Update, context: ContextTypes.DEFAULT
         except:
             link_line = f"🔒 Private  |  ID: `{cid}`"
 
+    cinfo = {"title": title, "type": ctype}
     logger.info(f"Bot added to {cid} ({title}) by {adder_uid}")
 
-    # ── Always notify admin ──────────────────
-    admin_kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Yes, Add", callback_data=f"gadd:{adder_uid}:{cid}"),
-        InlineKeyboardButton("❌ No",       callback_data=f"gdeny:{cid}"),
-    ]])
-    admin_text = (
-        f"🔔 *Bot added to a chat!*\n\n"
-        f"{e} *{title}*\n"
-        f"{link_line}\n"
-        f"Added by: *{adder_name}*{adder_uname}\n\n"
-        f"Add this to your broadcast list?"
-    )
-    for aid in ADMIN_IDS:
-        try:
-            await context.bot.send_message(chat_id=aid, text=admin_text, reply_markup=admin_kb, parse_mode=ParseMode.MARKDOWN)
-            logger.info(f"Admin {aid} notified about {cid}")
-        except Exception as ex:
-            logger.error(f"Failed to notify admin {aid}: {ex}")
-
-    # ── Also notify the user who added (if approved non-admin) ──
-    if adder_uid and not is_admin(adder_uid) and is_approved(adder_uid):
-        user_kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Yes, Add", callback_data=f"ugadd:{adder_uid}:{cid}"),
-            InlineKeyboardButton("❌ No",       callback_data=f"ugdeny:{cid}"),
+    if adder_uid and is_admin(adder_uid):
+        # ── Admin added it → ask Yes/No ──────────────────────────
+        admin_kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Yes, Add", callback_data=f"gadd:{adder_uid}:{cid}"),
+            InlineKeyboardButton("❌ No",       callback_data=f"gdeny:{cid}"),
         ]])
-        try:
-            await context.bot.send_message(
-                chat_id=adder_uid,
-                text=f"🔔 *Bot added to {e} {title}*\n\nAdd this to your broadcast list?",
-                reply_markup=user_kb, parse_mode=ParseMode.MARKDOWN,
-            )
-        except Exception as ex:
-            logger.error(f"Failed to notify user {adder_uid}: {ex}")
+        for aid in ADMIN_IDS:
+            try:
+                await context.bot.send_message(
+                    chat_id=aid,
+                    text=(
+                        f"🔔 *Bot added to a chat!*\n\n"
+                        f"{e} *{title}*\n{link_line}\n\n"
+                        f"Add to your broadcast list?"
+                    ),
+                    reply_markup=admin_kb, parse_mode=ParseMode.MARKDOWN,
+                )
+            except Exception as ex: logger.error(f"Admin notify failed: {ex}")
+
+    elif adder_uid and is_approved(adder_uid):
+        # ── Approved user added it → auto-add instantly ──────────
+        users_data = load_users()
+        u2 = next((x for x in users_data["approved"] if x["id"] == adder_uid), None)
+        if u2:
+            if cid not in u2.get("target_chats", []):
+                u2.setdefault("target_chats", []).append(cid)
+                u2.setdefault("chat_info", {})[str(cid)] = cinfo
+                save_users(users_data)
+                try:
+                    await context.bot.send_message(
+                        chat_id=adder_uid,
+                        text=f"✅ {e} *{title}* added to your broadcast list!\n{link_line}",
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                except Exception as ex: logger.error(f"User notify failed: {ex}")
+            # Notify admin (info only, no action needed)
+            for aid in ADMIN_IDS:
+                try:
+                    await context.bot.send_message(
+                        chat_id=aid,
+                        text=f"ℹ️ {e} *{title}* auto-added to *{adder_name}*{adder_uname}'s list\n{link_line}",
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                except: pass
+
+    else:
+        # ── Unknown user added bot → ask admin Yes/No ─────────────
+        admin_kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Yes, Add", callback_data=f"gadd:{adder_uid}:{cid}"),
+            InlineKeyboardButton("❌ No",       callback_data=f"gdeny:{cid}"),
+        ]])
+        for aid in ADMIN_IDS:
+            try:
+                await context.bot.send_message(
+                    chat_id=aid,
+                    text=(
+                        f"🔔 *Bot added to a chat!*\n\n"
+                        f"{e} *{title}*\n{link_line}\n"
+                        f"Added by: *{adder_name}*{adder_uname}\n\n"
+                        f"Add to your broadcast list?"
+                    ),
+                    reply_markup=admin_kb, parse_mode=ParseMode.MARKDOWN,
+                )
+            except Exception as ex: logger.error(f"Admin notify failed: {ex}")
 
 async def error_handler(update, context):
     from telegram.error import Conflict, NetworkError, TimedOut

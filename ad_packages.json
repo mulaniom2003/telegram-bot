@@ -1,0 +1,14 @@
+[
+  {
+    "id": "pkg_1779310310748",
+    "name": "1 GROUP ADs",
+    "price": "10",
+    "currency": "USD",
+    "payment_info": "USDT TRC20\n\nTQ5RyzFNuzPwXTDpzRb52GMMwVPTU7GTze",
+    "chat_ids": [
+      -5064712976
+    ],
+    "active": true,
+    "created_at": "2026-05-20T20:51:50.748538+00:00"
+  }
+]
