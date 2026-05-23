@@ -843,12 +843,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("approve:"):
         req_uid = int(data[8:])
+        already = any(u["id"]==req_uid for u in users["approved"])
+        if already:
+            await q.answer("Already approved!", show_alert=True)
+            await q.edit_message_text(f"✅ Already approved.", parse_mode=ParseMode.MARKDOWN)
+            return
         pe = next((u for u in users["pending"] if u["id"]==req_uid), {"id":req_uid,"name":str(req_uid)})
-        users["pending"]  = [u for u in users["pending"]  if u["id"]!=req_uid]
-        users["denied"]   = [u for u in users["denied"]   if u["id"]!=req_uid]
-        if not any(u["id"]==req_uid for u in users["approved"]):
-            pe.update({"added_at":datetime.now(timezone.utc).isoformat(),"target_chats":[],"chat_info":{},"removed_chats":[],"ad_packages":[],"pending_payments":[]})
-            users["approved"].append(pe)
+        users["pending"] = [u for u in users["pending"] if u["id"]!=req_uid]
+        users["denied"]  = [u for u in users["denied"]  if u["id"]!=req_uid]
+        pe.update({"added_at":datetime.now(timezone.utc).isoformat(),"target_chats":[],"chat_info":{},"removed_chats":[],"ad_packages":[],"pending_payments":[]})
+        users["approved"].append(pe)
         save_users(users)
         await q.edit_message_text(f"✅ *{pe.get('name',req_uid)}* approved!", parse_mode=ParseMode.MARKDOWN)
         try: await context.bot.send_message(chat_id=req_uid, text="✅ *Access approved!*\nSend /start.", parse_mode=ParseMode.MARKDOWN)

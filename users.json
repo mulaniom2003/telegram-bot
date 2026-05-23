@@ -35,6 +35,18 @@
       "removed_chats": [],
       "ad_packages": [],
       "pending_payments": []
+    },
+    {
+      "id": 5732298776,
+      "name": "Prince Rana",
+      "username": "princerana",
+      "requested_at": "2026-05-22T19:31:14.362850+00:00",
+      "added_at": "2026-05-22T19:39:16.805498+00:00",
+      "target_chats": [],
+      "chat_info": {},
+      "removed_chats": [],
+      "ad_packages": [],
+      "pending_payments": []
     }
   ],
   "pending": [],
